@@ -1,5 +1,6 @@
-// use anyhow::{Context, Result};
-use std::path::Path;
+use anyhow::{Context, Result};
+use std::io::{BufRead, BufReader};
+use std::{fs::File, path::Path};
 use walkdir::{DirEntry, WalkDir};
 
 fn dir_filter(entry: &DirEntry, ext: &str) -> bool {
@@ -12,11 +13,12 @@ fn dir_filter(entry: &DirEntry, ext: &str) -> bool {
     }
 }
 
-fn main() {
+fn main() -> Result<()> {
     println!("Hello, world!");
 
     let dir = Path::new("/home/revans/personal/todo/data");
     let ext = "py";
+    let search_str = "# TODO!";
 
     for entry in WalkDir::new(dir)
         .into_iter()
@@ -29,7 +31,28 @@ fn main() {
             && let Some(file_ext) = path.extension()
             && file_ext.to_string_lossy() == ext
         {
-            println!("Found file: {:?}", &path)
+            println!("Found file: {:?}", &path);
+            let file =
+                File::open(path).with_context(|| format!("Failed to open file: '{:?}'", &path))?;
+            let reader = BufReader::new(file);
+            for (i, line) in reader.lines().enumerate() {
+                match line {
+                    Ok(str) => {
+                        if str.contains(search_str) {
+                            println!(
+                                "{:?}: Line {} - {:?}",
+                                &path,
+                                i,
+                                &str.trim().trim_start_matches(search_str)
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        println!("{}", e);
+                    }
+                }
+            }
         }
     }
+    Ok(())
 }
