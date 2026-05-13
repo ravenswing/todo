@@ -1,0 +1,14 @@
+# Python ignores
+__pycache__
+build
+dist
+.venv
+
+# Rust ignores
+target
+
+# Node ignores
+node_modules
+
+# Git
+.git

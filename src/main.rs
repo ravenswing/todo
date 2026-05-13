@@ -1,8 +1,12 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::collections::HashSet;
 use std::io::{BufRead, BufReader};
 use std::{fs::File, path::Path};
 use walkdir::{DirEntry, WalkDir};
+
+// File to store default directories to ignore when searching
+const IGNORE_DIRS: &str = include_str!("../.todoignore");
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -18,13 +22,14 @@ struct Args {
     search: String,
 }
 
-fn dir_filter(entry: &DirEntry, ext: &str) -> bool {
-    let path = entry.path();
-    if let Some(file_ext) = path.extension() {
-        println!("{:?}", &file_ext);
-        file_ext.to_string_lossy() == ext
-    } else {
+fn filter_ignored(entry: &DirEntry, ignore: &HashSet<String>) -> bool {
+    if entry.file_type().is_dir()
+        && let Some(name) = entry.file_name().to_str()
+        && ignore.contains(name)
+    {
         false
+    } else {
+        true
     }
 }
 
@@ -52,9 +57,16 @@ fn main() -> Result<()> {
     let dir = Path::new(&args.dir);
     let search_str = format!("{} {}", get_comment_str(ext), args.search);
 
+    let ignore_dirs: HashSet<String> = IGNORE_DIRS
+        .lines() // -> &str
+        .map(|line| line.trim()) // trims whitespace ->  &str
+        .filter(|line| !line.is_empty() && !line.starts_with('#')) // keep only valid, non-comment
+        .map(|line| line.to_string()) // convert the surviving &str back to owned Strings
+        .collect();
+
     for entry in WalkDir::new(dir)
         .into_iter()
-        //.filter_entry(|e| dir_filter(e, ext))
+        .filter_entry(|e| filter_ignored(e, &ignore_dirs))
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
@@ -63,19 +75,24 @@ fn main() -> Result<()> {
             && let Some(file_ext) = path.extension()
             && file_ext.to_string_lossy() == ext
         {
-            println!("Found file: {}", &path.display());
             let file = File::open(path)
                 .with_context(|| format!("Failed to open file: '{:?}'", &path.display()))?;
             let reader = BufReader::new(file);
+
+            let mut first_find = true;
             for (i, line) in reader.lines().enumerate() {
                 match line {
                     Ok(str) => {
                         if str.contains(&search_str) {
+                            if first_find {
+                                println!();
+                                first_find = false
+                            }
                             println!(
                                 "{} : Line {} - {}",
                                 &path.display(),
                                 i,
-                                &str.trim().trim_start_matches(&search_str)
+                                &str.trim().trim_start_matches(&search_str).trim()
                             );
                         }
                     }
