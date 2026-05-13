@@ -40,8 +40,8 @@ fn main() -> Result<()> {
                     Ok(str) => {
                         if str.contains(search_str) {
                             println!(
-                                "{:?}: Line {} - {:?}",
-                                &path,
+                                "{} : Line {} - {}",
+                                &path.display(),
                                 i,
                                 &str.trim().trim_start_matches(search_str)
                             );
