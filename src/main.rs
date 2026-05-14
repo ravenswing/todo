@@ -57,39 +57,43 @@ enum Status {
 #[derive(Debug, Clone)]
 struct Task {
     task: String,
-    line: u32,
+    line_no: u32,
     status: Status,
     priority: Option<char>,
     projects: Option<Vec<String>>,
 }
 
-fn extract_priority(line: &mut str) -> (Option<char>, &str) {
+fn extract_priority(line: &str) -> (Option<char>, &str) {
     // Search for (X) at the beginning of the line
     if line.starts_with('(')
         && line.len() >= 3
-        && Some(')') == line.chars().nth(2)
+        && line.chars().nth(2) == Some(')')
         && let Some(c) = line.chars().nth(1)
     {
         // Slice off the "(X)" and trim any following spaces
         let line = line[3..].trim_start();
+        // Return the priority character and the trimmed line
         (Some(c), line)
-    // If not found, return None and unedited line
     } else {
+        // If not found, return None and unedited line
         (None, line)
     }
 }
 
-fn extract_projects(line: &mut str) -> (Option<Vec<String>>, &str) {
+fn extract_projects(line: &str) -> (Option<Vec<String>>, String) {
     // Quick return if no tagged projects are in the line
     if !line.contains("+") {
-        return (None, line);
+        return (None, line.to_string());
     }
 
+    // Split all the words and a Vec to hold potential project tags
     let mut words: Vec<&str> = line.split_whitespace().collect();
     let mut projects_vec = Vec::new();
 
+    // Starting from the back, search the words for '+' tag
     while let Some(word) = words.last() {
         if word.starts_with('+') && word.len() > 1 {
+            // Add to the projects list
             projects_vec.push(word[1..].to_string()); // Omit the '+' symbol
             words.pop();
         } else {
@@ -97,21 +101,31 @@ fn extract_projects(line: &mut str) -> (Option<Vec<String>>, &str) {
         }
     }
 
-    projects_vec.reverse();
-
-    let projects = if projects_vec.is_empty() {
-        None
+    // Empty vector for whatever reason just returns None and the string
+    if projects_vec.is_empty() {
+        (None, words.join(" "))
     } else {
-        Some(projects_vec)
-    };
-    let task_body = words.join(" ");
+        // Maintain the projects in the order they appear in the line
+        projects_vec.reverse();
+        (Some(projects_vec), words.join(" "))
+    }
 }
 
-fn parse_task(tagged_line: &str, search_str: &str) -> Task {
+fn parse_task(tagged_line: &str, search_str: &str, line_no: u32) -> Task {
     // remove the search string
-    let line = tagged_line.trim().trim_start_matches(&search_str).trim();
-
-    let (priority, line) = extract_priority(&mut line);
+    let line = tagged_line.trim().trim_start_matches(search_str).trim();
+    // Split and read the priority from the start of the line
+    let (priority, line) = extract_priority(line);
+    // Split and read the projects tags from the end of the line
+    let (projects, task) = extract_projects(line);
+    // Build and return the open task
+    Task {
+        task,
+        line_no,
+        status: Status::Open,
+        priority,
+        projects,
+    }
 }
 
 fn main() -> Result<()> {
@@ -142,23 +156,30 @@ fn main() -> Result<()> {
             && file_ext.to_string_lossy() == ext
         {
             let file = File::open(path)
-                .with_context(|| format!("Failed to open file: '{:?}'", &path.display()))?;
+                .with_context(|| format!("Failed to open file: '{}'", &path.display()))?;
             let reader = BufReader::new(file);
 
             let mut first_find = true;
             for (i, line) in reader.lines().enumerate() {
                 match line {
-                    Ok(str) => {
-                        if str.contains(&search_str) {
+                    Ok(tagged_line) => {
+                        if tagged_line.contains(&search_str) {
                             if first_find {
                                 println!();
                                 first_find = false
                             }
+
+                            let task = parse_task(
+                                &tagged_line,
+                                &search_str,
+                                (i + 1).try_into().unwrap_or(0),
+                            );
+
                             println!(
-                                "{} : Line {} - {}",
+                                "{} : Line {:3} - {}",
                                 &path.display(),
-                                i,
-                                &str.trim().trim_start_matches(&search_str).trim()
+                                &task.line_no,
+                                &task.task
                             );
                         }
                     }
