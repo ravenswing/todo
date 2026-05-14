@@ -48,6 +48,72 @@ fn get_comment_str(ext: &str) -> &'static str {
         _ => "",
     }
 }
+#[derive(Debug, Copy, Clone)]
+enum Status {
+    Open,
+    Completed,
+}
+
+#[derive(Debug, Clone)]
+struct Task {
+    task: String,
+    line: u32,
+    status: Status,
+    priority: Option<char>,
+    projects: Option<Vec<String>>,
+}
+
+fn extract_priority(line: &mut str) -> (Option<char>, &str) {
+    // Search for (X) at the beginning of the line
+    if line.starts_with('(')
+        && line.len() >= 3
+        && Some(')') == line.chars().nth(2)
+        && let Some(c) = line.chars().nth(1)
+    {
+        // Slice off the "(X)" and trim any following spaces
+        let line = line[3..].trim_start();
+        (Some(c), line)
+    // If not found, return None and unedited line
+    } else {
+        (None, line)
+    }
+}
+
+fn extract_projects(line: &mut str) -> (Option<Vec<String>>, &str) {
+    // Quick return if no tagged projects are in the line
+    if !line.contains("+") {
+        return (None, line);
+    }
+
+    let mut words: Vec<&str> = line.split_whitespace().collect();
+    let mut projects_vec = Vec::new();
+
+    while let Some(word) = words.last() {
+        if word.starts_with('+') && word.len() > 1 {
+            projects_vec.push(word[1..].to_string()); // Omit the '+' symbol
+            words.pop();
+        } else {
+            break;
+        }
+    }
+
+    projects_vec.reverse();
+
+    let projects = if projects_vec.is_empty() {
+        None
+    } else {
+        Some(projects_vec)
+    };
+    let task_body = words.join(" ");
+}
+
+fn parse_task(tagged_line: &str, search_str: &str) -> Task {
+    // remove the search string
+    let line = tagged_line.trim().trim_start_matches(&search_str).trim();
+
+    let (priority, line) = extract_priority(&mut line);
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
